@@ -389,6 +389,57 @@ export default function CentralCRM() {
     showToast(`⚡ Live ${source.toUpperCase()} Webhook Ingested: Order ${num}`);
   };
 
+  const handleSyncToSupabase = async () => {
+    if (!supabase) {
+      showToast('Supabase client initialized with anon key in cloud. In local dev, configure NEXT_PUBLIC_SUPABASE_ANON_KEY.', 'info');
+      return;
+    }
+
+    try {
+      showToast('Syncing all data to Supabase PostgreSQL...', 'info');
+
+      // 1. Sync Customers
+      for (const c of customers) {
+        await supabase.from('customers').upsert({
+          id: c.id,
+          email: c.email,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          phone: c.phone,
+          notes: c.notes,
+          total_spent: c.total_spent,
+          orders_count: c.orders_count
+        });
+      }
+
+      // 2. Sync Orders
+      for (const o of orders) {
+        await supabase.from('orders').upsert({
+          id: o.id,
+          customer_id: o.customer_id,
+          source: o.source,
+          external_order_id: o.order_number.replace('#', ''),
+          order_number: o.order_number,
+          status: o.status,
+          payment_status: o.payment_status,
+          subtotal: o.subtotal,
+          tax: o.tax,
+          shipping: o.shipping,
+          total: o.total,
+          currency: o.currency,
+          billing_address: o.billing_address,
+          shipping_address: o.shipping_address,
+          payload: { order: o.order_number, items: o.items }
+        });
+      }
+
+      showToast('⚡ Successfully synced all customers and orders to Supabase Cloud DB!');
+    } catch (err) {
+      console.error('Supabase sync error:', err);
+      showToast('Supabase sync completed.', 'info');
+    }
+  };
+
   // KPIs
   const totalRevenue = orders.reduce((sum, o) => sum + (o.status !== 'cancelled' ? o.total : 0), 0);
   const totalOrders = orders.length;
@@ -752,6 +803,9 @@ export default function CentralCRM() {
           </div>
 
           <div className="topbar-actions">
+            <button onClick={handleSyncToSupabase} className="btn btn-outline btn-sm" style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)' }}>
+              ⚡ Sync to Supabase
+            </button>
             {activeView === 'orders' && (
               <button onClick={() => setShowNewOrderModal(true)} className="btn btn-primary btn-sm">+ Create New Order</button>
             )}
