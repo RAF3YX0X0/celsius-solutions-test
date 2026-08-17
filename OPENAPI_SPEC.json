@@ -1,0 +1,130 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Central Multi-Store CRM & Webhook Ingestion API",
+    "version": "1.0.0",
+    "description": "Unified Order Management System integrating Shopify and WooCommerce stores with HMAC signature verification, idempotent deduplication, cold-chain tracking, and real-time inventory management."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "https://your-crm.vercel.app",
+      "description": "Vercel Production Deployment"
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "summary": "Authenticate user (Admin / Staff)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "admin@crm.local" },
+                  "password": { "type": "string", "example": "admin123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "JWT Bearer Token returned" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/webhooks/shopify": {
+      "post": {
+        "summary": "Shopify Inbound Order Webhook",
+        "description": "Accepts HMAC-SHA256 signed payload from Shopify. Deduplicates by order ID, upserts customer, and deducts inventory.",
+        "parameters": [
+          { "name": "x-shopify-hmac-sha256", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-shopify-webhook-id", "in": "header", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "201": { "description": "Order ingested successfully" },
+          "200": { "description": "Idempotent duplicate ignored safely" },
+          "401": { "description": "HMAC signature mismatch" }
+        }
+      }
+    },
+    "/api/webhooks/woocommerce": {
+      "post": {
+        "summary": "WooCommerce Inbound Order Webhook",
+        "description": "Accepts HMAC-SHA256 signed payload from WooCommerce.",
+        "parameters": [
+          { "name": "x-wc-webhook-signature", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "201": { "description": "Order ingested successfully" },
+          "401": { "description": "HMAC signature mismatch" }
+        }
+      }
+    },
+    "/api/orders": {
+      "get": {
+        "summary": "List & Filter Orders",
+        "parameters": [
+          { "name": "source", "in": "query", "schema": { "type": "string", "enum": ["all", "shopify", "woocommerce"] } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 25 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated list of orders" }
+        }
+      }
+    },
+    "/api/orders/track/lookup": {
+      "get": {
+        "summary": "Public Customer Order Tracking & History",
+        "parameters": [
+          { "name": "query", "in": "query", "required": true, "schema": { "type": "string", "example": "marcus.vance@techcorp.io" } }
+        ],
+        "responses": {
+          "200": { "description": "Customer order history with cold-chain tracking steps" },
+          "404": { "description": "No orders found" }
+        }
+      }
+    },
+    "/api/products": {
+      "get": {
+        "summary": "Search & Filter 1,000+ Products Catalogue",
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated products list" }
+        }
+      }
+    },
+    "/api/sync-failures": {
+      "get": {
+        "summary": "Dead-Letter Queue (DLQ) Failed Webhooks",
+        "responses": {
+          "200": { "description": "List of captured webhook payload failures" }
+        }
+      }
+    },
+    "/api/sync-failures/{id}/retry": {
+      "post": {
+        "summary": "Replay & Retry Failed Webhook",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Payload reprocessed successfully" }
+        }
+      }
+    }
+  }
+}

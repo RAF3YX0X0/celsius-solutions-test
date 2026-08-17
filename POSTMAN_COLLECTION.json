@@ -1,0 +1,101 @@
+{
+  "info": {
+    "name": "Central CRM Multi-Store Webhook & Management Collection",
+    "_postman_id": "celsius-solutions-crm-2026",
+    "description": "Postman collection covering all endpoints: Auth, Webhooks (Shopify/WooCommerce), Order Processing, Customer 360, DLQ Retry, and Public Cold-Chain Tracking.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@crm.local\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (Inbound)",
+      "item": [
+        {
+          "name": "Shopify Inbound Order Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-shopify-hmac-sha256", "value": "TEST_HMAC_OR_LIVE" },
+              { "key": "x-shopify-topic", "value": "orders/create" },
+              { "key": "x-crm-test-mode", "value": "true" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"sh_manual_postman_1001\",\n  \"order_number\": \"1045\",\n  \"email\": \"marcus.vance@techcorp.io\",\n  \"financial_status\": \"paid\",\n  \"total_price\": \"59.98\",\n  \"line_items\": [\n    {\n      \"id\": \"p1\",\n      \"title\": \"Cold Pressed Raw Milk\",\n      \"sku\": \"DAIRY-RAW-001\",\n      \"price\": \"29.99\",\n      \"quantity\": 2\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/webhooks/shopify", "host": ["{{baseUrl}}"], "path": ["api", "webhooks", "shopify"] }
+          }
+        },
+        {
+          "name": "WooCommerce Inbound Order Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-wc-webhook-topic", "value": "order.created" },
+              { "key": "x-crm-test-mode", "value": "true" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 99042,\n  \"number\": \"99042\",\n  \"status\": \"processing\",\n  \"total\": \"39.98\",\n  \"billing\": { \"email\": \"elena.rostova@designstudio.com\", \"first_name\": \"Elena\", \"last_name\": \"Rostova\" },\n  \"line_items\": [\n    { \"id\": 1, \"name\": \"Full Cream Barista Milk\", \"sku\": \"STB-FUL-0002\", \"price\": 19.99, \"quantity\": 2 }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/webhooks/woocommerce", "host": ["{{baseUrl}}"], "path": ["api", "webhooks", "woocommerce"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders & Tracking",
+      "item": [
+        {
+          "name": "List All Ingested Orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/orders?page=1&limit=25", "host": ["{{baseUrl}}"], "path": ["api", "orders"] }
+          }
+        },
+        {
+          "name": "Public Order Cold-Chain Tracking & Customer History",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/orders/track/lookup?query=marcus.vance@techcorp.io", "host": ["{{baseUrl}}"], "path": ["api", "orders", "track", "lookup"], "query": [{ "key": "query", "value": "marcus.vance@techcorp.io" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products (1,000+ Items)",
+      "item": [
+        {
+          "name": "Search 1,000 Milk Products",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/products?search=Raw Milk&page=1", "host": ["{{baseUrl}}"], "path": ["api", "products"] }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "jwtToken", "value": "" }
+  ]
+}

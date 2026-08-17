@@ -1,0 +1,7 @@
+node_modules
+data/*.sqlite
+data/*.sqlite-journal
+.vercel
+.env
+.DS_Store
+Thumbs.db
