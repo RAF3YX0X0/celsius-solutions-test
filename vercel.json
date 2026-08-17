@@ -1,9 +1,3 @@
 {
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/((?!css/|js/|assets/|favicon.ico).*)",
-      "destination": "/index.html"
-    }
-  ]
+  "framework": "nextjs"
 }
