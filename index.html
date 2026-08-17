@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Central CRM | Multi-Store Order Management System</title>
+  <meta name="description" content="Centralized Order Management and Multi-Store Ingestion System for Shopify and WooCommerce with Customer Deduplication, DLQ Failure Handling, and Webhook Security.">
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/components.css">
+</head>
+<body>
+  <div id="app">
+    <!-- App layout rendered by JavaScript -->
+    <div class="app-initial-loader">
+      <div class="spinner"></div>
+      <h2>Central CRM</h2>
+      <p>Initializing Multi-Store Hub...</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/js/icons.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/state.js"></script>
+  
+  <!-- View Components -->
+  <script src="/js/components/orderDetailDrawer.js"></script>
+  <script src="/js/components/customerDetailDrawer.js"></script>
+  <script src="/js/components/dashboardView.js"></script>
+  <script src="/js/components/ordersView.js"></script>
+  <script src="/js/components/customersView.js"></script>
+  <script src="/js/components/productsView.js"></script>
+  <script src="/js/components/syncFailuresView.js"></script>
+  <script src="/js/components/customerPortalView.js"></script>
+  <script src="/js/components/simulatorView.js"></script>
+  <script src="/js/components/docsView.js"></script>
+  
+  <!-- App Entrypoint -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
