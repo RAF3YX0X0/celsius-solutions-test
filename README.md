@@ -102,3 +102,4 @@ Open your browser at:
 5. Inspect **Customers**: See both Shopify and WooCommerce orders merged into the customer's profile!
 6. Test **Security Tamper Check**: Switch to **Security & Tamper Test Lab** and run the tamper attack.
 7. Test **Dead Letter Queue**: Click **Run Malformed Payload Test** and visit **Dead Letter Queue** to inspect and retry.
+"# celsius-solutions-test" 
