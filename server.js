@@ -24,8 +24,12 @@ const simulatorRoutes = require('./src/routes/simulator');
 const app = express();
 
 // Initialize Database & Seed
-initDatabase();
-seedDatabase(false);
+try {
+  initDatabase();
+  seedDatabase(false);
+} catch (e) {
+  console.error('[CRM Init Warning]:', e.message);
+}
 
 // CORS & Body Parsing (Preserving rawBody for HMAC-SHA256 verification)
 app.use(cors({ origin: config.corsOrigins, credentials: true }));
@@ -87,13 +91,18 @@ app.use((req, res, next) => {
 // Centralized Error Handler
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
-  console.log(`=======================================================`);
-  console.log(` 🚀 CRM Central Order Management System is Running!`);
-  console.log(` 🌐 URL: http://localhost:${config.port}`);
-  console.log(` 🔐 Admin Login: admin@crm.local  /  admin123`);
-  console.log(` 👤 Staff Login: staff@crm.local  /  staff123`);
-  console.log(`=======================================================`);
-});
+// Only listen on port if not running inside a Serverless Function (Vercel / Lambda)
+const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+if (!isServerless) {
+  app.listen(config.port, () => {
+    console.log(`=======================================================`);
+    console.log(` 🚀 CRM Central Order Management System is Running!`);
+    console.log(` 🌐 URL: http://localhost:${config.port}`);
+    console.log(` 🔐 Admin Login: admin@crm.local  /  admin123`);
+    console.log(` 👤 Staff Login: staff@crm.local  /  staff123`);
+    console.log(`=======================================================`);
+  });
+}
 
-module.exports = { app, server };
+// CRITICAL FOR VERCEL SERVERLESS: Export express application directly
+module.exports = app;
