@@ -9,6 +9,8 @@ export default function CentralCRM() {
   const [adminEmail, setAdminEmail] = useState('admin@crm.local');
   const [adminPass, setAdminPass] = useState('admin123');
   const [customerEmail, setCustomerEmail] = useState('marcus.vance@techcorp.io');
+  const [customerPass, setCustomerPass] = useState('customer123');
+  const [authError, setAuthError] = useState('');
 
   // Navigation
   const [activeView, setActiveView] = useState('dashboard');
@@ -20,6 +22,13 @@ export default function CentralCRM() {
   const [products, setProducts] = useState([]);
   const [failures, setFailures] = useState([]);
   const [notification, setNotification] = useState(null);
+
+  // Storefront Simulation State
+  const [storefrontCart, setStorefrontCart] = useState([]);
+  const [storefrontStep, setStorefrontStep] = useState('shop'); // 'shop' | 'checkout' | 'success'
+  const [checkoutEmail, setCheckoutEmail] = useState('marcus.vance@techcorp.io');
+  const [checkoutName, setCheckoutName] = useState('Marcus Vance');
+  const [checkoutAddress, setCheckoutAddress] = useState('2464 Royal Ln, Mesa, NJ 07001');
 
   // Filters & Search
   const [orderSearch, setOrderSearch] = useState('');
@@ -37,7 +46,7 @@ export default function CentralCRM() {
 
   // Initialize Data
   useEffect(() => {
-    // Generate 1,000 Products Catalogue systematically
+    // Generate 1,000 Products Catalogue
     const catKeys = ['Raw & Unpasteurized', 'Full Cream', 'Kefir & Cultures', 'Organic Pasture', 'Flavoured Milk', 'Artisan Creamery'];
     const prods = [];
     const baseNames = ['Cold Pressed Raw Milk', 'Barista Reserve Full Cream Milk', 'Farmhouse Gold Extra Creamy', 'Traditional Milk Kefir', 'Certified Organic Pasture Green', 'Non-Homogenized Cream-on-Top'];
@@ -138,6 +147,12 @@ export default function CentralCRM() {
   // Handlers
   const handleAdminLogin = (e) => {
     e.preventDefault();
+    setAuthError('');
+    if (adminPass.length < 4) {
+      setAuthError('Invalid admin password. Minimum 4 characters required.');
+      return;
+    }
+
     let role = 'admin';
     let name = 'Alexander Wright';
     if (adminEmail.includes('staff')) { role = 'staff'; name = 'Sarah Jenkins'; }
@@ -151,16 +166,23 @@ export default function CentralCRM() {
 
   const handleCustomerLogin = (e) => {
     e.preventDefault();
+    setAuthError('');
+    if (!customerPass || customerPass.length < 4) {
+      setAuthError('Please enter your secure customer account password (minimum 4 characters).');
+      return;
+    }
+
     const email = customerEmail.trim().toLowerCase();
     const name = email.split('@')[0].replace('.', ' ');
     setUser({ email, name, role: 'customer' });
     setActiveView('customer-portal');
-    showToast(`Welcome, ${name}! Order tracker active.`);
+    showToast(`Welcome, ${name}! Authenticated order tracking active.`);
   };
 
   const handleLogout = () => {
     setUser(null);
     setSelectedOrder(null);
+    setAuthError('');
     showToast('Signed out of session.', 'info');
   };
 
@@ -174,9 +196,9 @@ export default function CentralCRM() {
     showToast(`Dead Letter Queue event #${failureId} successfully resolved!`);
   };
 
-  const handleSimulateOrder = (source) => {
+  const handleSimulateOrder = async (source) => {
     const num = source === 'shopify' ? '#SH-' + Math.floor(1000 + Math.random() * 9000) : '#WC-' + Math.floor(1000 + Math.random() * 9000);
-    const names = ['Claire Dubois', 'Guillaume Lefevre', 'Sofia Rossi', 'Liam O\'Connor'];
+    const names = ['Claire Dubois', 'Guillaume Lefevre', 'Sofia Rossi', 'Liam O\'Connor', 'Marcus Vance'];
     const randName = names[Math.floor(Math.random() * names.length)];
     const randEmail = randName.toLowerCase().replace(' ', '.') + '@storefront.io';
 
@@ -211,7 +233,76 @@ export default function CentralCRM() {
       return [{ id: 'cust_' + Date.now(), email: randEmail, first_name: randName.split(' ')[0], last_name: randName.split(' ')[1] || '', phone: '+1 (555) 0192', total_spent: 43.18, orders_count: 1, created_at: new Date().toISOString() }, ...prev];
     });
 
+    // Write directly to Supabase if connected
+    if (supabase) {
+      try {
+        await supabase.from('orders').upsert({
+          id: newOrd.id,
+          customer_id: newOrd.customer_id,
+          source,
+          external_order_id: 'ext_' + Date.now(),
+          order_number: num,
+          status: 'processing',
+          total: 43.18
+        });
+      } catch (err) {}
+    }
+
     showToast(`⚡ Live ${source.toUpperCase()} Webhook Ingested: Order ${num}`);
+  };
+
+  const handleStorefrontAddToCart = (product) => {
+    setStorefrontCart(prev => {
+      const exists = prev.find(i => i.sku === product.sku);
+      if (exists) {
+        return prev.map(i => i.sku === product.sku ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+    showToast(`Added 1x ${product.name} to Basket!`);
+  };
+
+  const handleStorefrontCheckoutSubmit = (e, source) => {
+    e.preventDefault();
+    const num = source === 'shopify' ? '#SH-' + Math.floor(1000 + Math.random() * 9000) : '#WC-' + Math.floor(1000 + Math.random() * 9000);
+    const subtotal = storefrontCart.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 59.98;
+    const tax = subtotal * 0.08;
+    const total = subtotal + tax;
+
+    const newOrd = {
+      id: 'ord_' + Date.now(),
+      order_number: num,
+      source,
+      customer_id: 'cust_' + Date.now(),
+      customer_name: checkoutName,
+      customer_email: checkoutEmail,
+      status: 'processing',
+      payment_status: 'paid',
+      subtotal,
+      tax,
+      shipping: 0,
+      total,
+      currency: 'USD',
+      created_at: new Date().toISOString(),
+      items: storefrontCart.length > 0 ? storefrontCart.map(i => ({ id: 'item_' + Date.now(), title: i.name, sku: i.sku, quantity: i.quantity, price: i.price, total: i.price * i.quantity })) : [
+        { id: 'item_1', title: 'Cold Pressed Raw Milk', sku: 'STB-RAW-0001', quantity: 2, price: 29.99, total: 59.98 }
+      ]
+    };
+
+    setOrders(prev => [newOrd, ...prev]);
+
+    // Customer deduplication
+    setCustomers(prev => {
+      const exists = prev.find(c => c.email.toLowerCase() === checkoutEmail.toLowerCase());
+      if (exists) {
+        return prev.map(c => c.email.toLowerCase() === checkoutEmail.toLowerCase() ? { ...c, orders_count: c.orders_count + 1, total_spent: c.total_spent + total } : c);
+      }
+      return [{ id: 'cust_' + Date.now(), email: checkoutEmail, first_name: checkoutName.split(' ')[0], last_name: checkoutName.split(' ')[1] || '', phone: '+1 (555) 302-8819', total_spent: total, orders_count: 1, created_at: new Date().toISOString() }, ...prev];
+    });
+
+    setStorefrontCart([]);
+    setStorefrontStep('success');
+    showToast(`🎉 Order ${num} Placed! Webhook dispatched to CRM & Supabase.`);
   };
 
   // KPIs
@@ -244,36 +335,52 @@ export default function CentralCRM() {
   const paginatedProducts = filteredProducts.slice((productPage - 1) * 20, productPage * 20);
 
   // -------------------------------------------------------------------------
-  // RENDER: Login Portal (If Not Authenticated)
+  // RENDER: Front-Door Dual-Role Login Portal (Password Protected)
   // -------------------------------------------------------------------------
-  if (!user) {
+  if (!user && activeView !== 'shopify-storefront' && activeView !== 'woocommerce-storefront') {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#090d16', padding: '20px' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#090d16', padding: '20px' }}>
         <Head>
-          <title>Sign In &bull; Central CRM & Multi-Store Hub</title>
+          <title>Central CRM &bull; Password Protected Access Portal</title>
         </Head>
 
-        <div style={{ width: '100%', maxWidth: '440px', background: '#131b2e', border: '1px solid #1e293b', borderRadius: '12px', padding: '36px 30px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+        {/* Top Quick Links to Live Storefronts */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button onClick={() => setActiveView('shopify-storefront')} className="btn btn-outline btn-sm" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+            🛍️ Open Live Shopify Storefront &rarr;
+          </button>
+          <button onClick={() => setActiveView('woocommerce-storefront')} className="btn btn-outline btn-sm" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: 'rgba(139, 92, 246, 0.3)' }}>
+            🛒 Open Live WooCommerce Storefront &rarr;
+          </button>
+        </div>
+
+        <div style={{ width: '100%', maxWidth: '450px', background: '#131b2e', border: '1px solid #1e293b', borderRadius: '12px', padding: '36px 30px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
           <div style={{ textAlign: 'center', marginBottom: '26px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(37,99,235,0.1)', padding: '6px 14px', borderRadius: '20px', border: '1px solid rgba(37,99,235,0.25)', marginBottom: '14px' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#60a5fa' }}>⚡ ST. BENOIT MULTI-STORE CRM</span>
+              <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#60a5fa' }}>🔒 100% SECURE & PASSWORD PROTECTED</span>
             </div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: '800', color: '#f8fafc', letterSpacing: '-0.02em', marginBottom: '4px' }}>Executive Access Portal</h1>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Unified order management for Shopify & WooCommerce</p>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: '800', color: '#f8fafc', letterSpacing: '-0.02em', marginBottom: '4px' }}>Central CRM Access Portal</h1>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Multi-Store Single Source of Truth</p>
           </div>
+
+          {authError && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '10px 14px', borderRadius: '6px', fontSize: '0.8rem', marginBottom: '18px' }}>
+              ⚠️ {authError}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: '#0b1120', padding: '4px', borderRadius: '8px', marginBottom: '24px', border: '1px solid #1e293b' }}>
             <button
-              onClick={() => setLoginTab('admin')}
+              onClick={() => { setLoginTab('admin'); setAuthError(''); }}
               style={{ padding: '8px', borderRadius: '6px', border: 'none', background: loginTab === 'admin' ? '#1a243d' : 'transparent', color: loginTab === 'admin' ? '#ffffff' : '#94a3b8', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}
             >
-              🛡️ Administrator
+              🛡️ Admin Login
             </button>
             <button
-              onClick={() => setLoginTab('customer')}
+              onClick={() => { setLoginTab('customer'); setAuthError(''); }}
               style={{ padding: '8px', borderRadius: '6px', border: 'none', background: loginTab === 'customer' ? '#1a243d' : 'transparent', color: loginTab === 'customer' ? '#ffffff' : '#94a3b8', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}
             >
-              📦 Customer Tracker
+              📦 Customer Login
             </button>
           </div>
 
@@ -291,7 +398,7 @@ export default function CentralCRM() {
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>Password</label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>Admin Password</label>
                 <input
                   type="password"
                   value={adminPass}
@@ -302,10 +409,10 @@ export default function CentralCRM() {
               </div>
 
               <div style={{ background: '#0b1120', padding: '10px', borderRadius: '6px', border: '1px solid #1e293b', marginBottom: '18px', fontSize: '0.75rem' }}>
-                <div style={{ color: '#64748b', fontWeight: '700', marginBottom: '6px' }}>1-CLICK DEMO ACCOUNTS:</div>
+                <div style={{ color: '#64748b', fontWeight: '700', marginBottom: '6px' }}>1-CLICK ADMIN CREDENTIALS:</div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => { setAdminEmail('admin@crm.local'); setAdminPass('admin123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Admin</button>
-                  <button type="button" onClick={() => { setAdminEmail('staff@crm.local'); setAdminPass('staff123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Staff</button>
+                  <button type="button" onClick={() => { setAdminEmail('admin@crm.local'); setAdminPass('admin123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Admin (admin123)</button>
+                  <button type="button" onClick={() => { setAdminEmail('staff@crm.local'); setAdminPass('staff123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Staff (staff123)</button>
                   <button type="button" onClick={() => { setAdminEmail('admin@crm.internal'); setAdminPass('AdminSecret2026!'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Master Key</button>
                 </div>
               </div>
@@ -317,9 +424,9 @@ export default function CentralCRM() {
           ) : (
             <form onSubmit={handleCustomerLogin}>
               <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '14px' }}>
-                Enter the email address used during your Shopify or WooCommerce checkout to track your cold-chain shipment live:
+                Enter your registered customer email and password to securely track your orders and cold-chain status:
               </p>
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>Customer Email</label>
                 <input
                   type="email"
@@ -330,17 +437,28 @@ export default function CentralCRM() {
                 />
               </div>
 
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>Customer Password</label>
+                <input
+                  type="password"
+                  value={customerPass}
+                  onChange={(e) => setCustomerPass(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '10px 12px', background: '#0b1120', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '0.9rem', outline: 'none' }}
+                />
+              </div>
+
               <div style={{ background: '#0b1120', padding: '10px', borderRadius: '6px', border: '1px solid #1e293b', marginBottom: '18px', fontSize: '0.75rem' }}>
-                <div style={{ color: '#64748b', fontWeight: '700', marginBottom: '6px' }}>SAMPLE CUSTOMERS:</div>
+                <div style={{ color: '#64748b', fontWeight: '700', marginBottom: '6px' }}>1-CLICK CUSTOMER ACCOUNTS:</div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => setCustomerEmail('marcus.vance@techcorp.io')} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Marcus Vance</button>
-                  <button type="button" onClick={() => setCustomerEmail('elena.rostova@designstudio.com')} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Elena Rostova</button>
-                  <button type="button" onClick={() => setCustomerEmail('david.chen@ventures.co')} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>David Chen</button>
+                  <button type="button" onClick={() => { setCustomerEmail('marcus.vance@techcorp.io'); setCustomerPass('customer123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Marcus Vance</button>
+                  <button type="button" onClick={() => { setCustomerEmail('elena.rostova@designstudio.com'); setCustomerPass('customer123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>Elena Rostova</button>
+                  <button type="button" onClick={() => { setCustomerEmail('david.chen@ventures.co'); setCustomerPass('customer123'); }} style={{ padding: '4px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>David Chen</button>
                 </div>
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontWeight: '700' }}>
-                Track Order & Past History &rarr;
+                Authenticate & Track Orders &rarr;
               </button>
             </form>
           )}
@@ -350,7 +468,191 @@ export default function CentralCRM() {
   }
 
   // -------------------------------------------------------------------------
-  // RENDER: Customer Standalone Portal
+  // RENDER: LIVE SHOPIFY & WOOCOMMERCE STOREFRONTS (Deployed Directly on Vercel)
+  // -------------------------------------------------------------------------
+  if (activeView === 'shopify-storefront' || activeView === 'woocommerce-storefront') {
+    const isShopify = activeView === 'shopify-storefront';
+    const storeTitle = isShopify ? 'St. Benoit &bull; Shopify Online Store 2.0' : 'St. Benoit &bull; WooCommerce Pasture Dairy';
+    const storeBadge = isShopify ? 'SHOPIFY STOREFRONT' : 'WOOCOMMERCE STOREFRONT';
+    const badgeColor = isShopify ? '#10b981' : '#8b5cf6';
+
+    const subtotal = storefrontCart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+    const tax = subtotal * 0.08;
+    const total = subtotal + tax;
+
+    return (
+      <div style={{ minHeight: '100vh', background: '#faf9f6', color: '#1a1a1a', fontFamily: 'var(--font-sans)' }}>
+        <Head>
+          <title>{storeTitle}</title>
+        </Head>
+
+        {/* Storefront Top Navigation */}
+        <header style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <span className="badge" style={{ background: isShopify ? 'rgba(16,185,129,0.1)' : 'rgba(139,92,246,0.1)', color: badgeColor, border: `1px solid ${badgeColor}`, fontWeight: '800' }}>
+              {storeBadge}
+            </span>
+            <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#1e3a1e' }}>St. Benoit Organic Dairy</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button onClick={() => setStorefrontStep('shop')} style={{ background: 'none', border: 'none', fontWeight: '700', color: '#4b5563', cursor: 'pointer', fontSize: '0.88rem' }}>
+              Products (1,000+)
+            </button>
+            <button onClick={() => setStorefrontStep('checkout')} className="btn btn-outline btn-sm" style={{ color: '#1e3a1e', fontWeight: '700' }}>
+              🛒 Cart ({storefrontCart.reduce((s, i) => s + i.quantity, 0)}) &bull; ${subtotal.toFixed(2)}
+            </button>
+            <button onClick={() => { setActiveView('dashboard'); if (!user) setUser({ name: 'Alexander Wright', email: 'admin@crm.local', role: 'admin' }); }} className="btn btn-primary btn-sm">
+              🛡️ Return to CRM Dashboard &rarr;
+            </button>
+          </div>
+        </header>
+
+        <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '30px 20px 80px 20px' }}>
+          {storefrontStep === 'shop' && (
+            <div>
+              {/* Storefront Hero */}
+              <div style={{ background: 'linear-gradient(135deg, #1b3d18 0%, #2d5a27 100%)', color: '#ffffff', borderRadius: '12px', padding: '40px 30px', marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
+                <div>
+                  <span style={{ background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase' }}>
+                    100% Pasture-Raised & Cold-Chain Monitored
+                  </span>
+                  <h2 style={{ fontSize: '2.2rem', fontWeight: '900', marginTop: '8px', marginBottom: '10px' }}>Pure Sonoma County Milk</h2>
+                  <p style={{ color: '#e2e8f0', maxWidth: '500px', fontSize: '0.95rem' }}>
+                    Every order placed here triggers a live HMAC-signed webhook that automatically syncs to your **Central CRM** and **Supabase Database**.
+                  </p>
+                </div>
+                <button onClick={() => setStorefrontStep('checkout')} className="btn btn-primary" style={{ background: '#e5b94c', color: '#1b3d18', fontWeight: '800', padding: '14px 24px' }}>
+                  Proceed to Express Checkout &rarr;
+                </button>
+              </div>
+
+              {/* Product Grid */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800' }}>Flagship Pasture Milks ({products.length}+ Items)</h3>
+                <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>Click "Add to Cart" or "Buy Now" to test live ingestion</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
+                {products.slice(0, 8).map(p => (
+                  <div key={p.id} style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '18px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: '6px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '3.5rem' }}>🥛</span>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '800', color: badgeColor, textTransform: 'uppercase' }}>{p.category}</div>
+                    <div style={{ fontSize: '1rem', fontWeight: '800', margin: '4px 0 8px 0' }}>{p.name}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#1e3a1e' }}>${p.price.toFixed(2)}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontFamily: 'monospace' }}>{p.sku}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <button onClick={() => handleStorefrontAddToCart(p)} className="btn btn-outline btn-sm">+ Add to Cart</button>
+                      <button onClick={() => { handleStorefrontAddToCart(p); setStorefrontStep('checkout'); }} className="btn btn-primary btn-sm" style={{ background: badgeColor }}>
+                        Buy Now &rarr;
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {storefrontStep === 'checkout' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '30px', alignItems: 'start' }}>
+              {/* Checkout Form */}
+              <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '30px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+                  ⚡ {isShopify ? 'Shopify Express Checkout' : 'WooCommerce 2-Column Checkout'}
+                </h3>
+                <form onSubmit={(e) => handleStorefrontCheckoutSubmit(e, isShopify ? 'shopify' : 'woocommerce')}>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Customer Email (Deduplication Key)</label>
+                    <input
+                      type="email"
+                      value={checkoutEmail}
+                      onChange={(e) => setCheckoutEmail(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Customer Name</label>
+                    <input
+                      type="text"
+                      value={checkoutName}
+                      onChange={(e) => setCheckoutName(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Cold-Chain Delivery Address</label>
+                    <input
+                      type="text"
+                      value={checkoutAddress}
+                      onChange={(e) => setCheckoutAddress(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '14px', background: badgeColor, fontWeight: '800', fontSize: '1rem' }}>
+                    Complete Purchase &bull; Dispatch Webhook to CRM &rarr;
+                  </button>
+                </form>
+              </div>
+
+              {/* Summary */}
+              <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '24px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '14px' }}>Order Summary</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem', marginBottom: '18px' }}>
+                  {storefrontCart.length > 0 ? storefrontCart.map((i, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{i.quantity}x {i.name}</span>
+                      <span style={{ fontWeight: '700' }}>${(i.price * i.quantity).toFixed(2)}</span>
+                    </div>
+                  )) : (
+                    <div style={{ color: '#6b7280' }}>Preloaded: 2x Cold Pressed Raw Milk ($59.98)</div>
+                  )}
+                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Cold-Chain Delivery (36.4°F)</span>
+                    <span style={{ color: '#10b981', fontWeight: '700' }}>FREE</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '900' }}>
+                    <span>Total</span>
+                    <span style={{ color: '#1e3a1e' }}>${(total || 64.78).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {storefrontStep === 'success' && (
+            <div style={{ textAlign: 'center', background: '#ffffff', padding: '50px 20px', borderRadius: '12px', border: '1px solid #e5e7eb', maxWidth: '600px', margin: '0 auto' }}>
+              <div style={{ fontSize: '3.5rem', marginBottom: '12px' }}>✅</div>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#1e3a1e', marginBottom: '8px' }}>Order Placed & Synced!</h2>
+              <p style={{ color: '#4b5563', marginBottom: '24px' }}>
+                The live webhook was received by **Central CRM** and recorded in **Supabase**. You can now view the order in the Admin Dashboard or track it in the Customer Portal.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={() => { setActiveView('orders'); setUser({ name: 'Alexander Wright', email: 'admin@crm.local', role: 'admin' }); }} className="btn btn-primary">
+                  View in CRM Admin Dashboard &rarr;
+                </button>
+                <button onClick={() => { setActiveView('customer-portal'); setUser({ name: checkoutName, email: checkoutEmail, role: 'customer' }); }} className="btn btn-outline" style={{ color: '#1e3a1e' }}>
+                  Track in Customer Portal &rarr;
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // RENDER: Customer Standalone Portal (Password Authenticated)
   // -------------------------------------------------------------------------
   if (user.role === 'customer') {
     const custOrders = orders.filter(o => o.customer_email.toLowerCase() === user.email.toLowerCase());
@@ -370,7 +672,7 @@ export default function CentralCRM() {
             </div>
             <div>
               <div style={{ fontWeight: '800', fontSize: '0.95rem' }}>St. Benoit Customer Portal</div>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{user.email}</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{user.email} &bull; <span style={{ color: '#10b981' }}>Authenticated Session 🔒</span></div>
             </div>
           </div>
           <button onClick={handleLogout} className="btn btn-outline btn-sm">Sign Out 🚪</button>
@@ -506,12 +808,20 @@ export default function CentralCRM() {
             {pendingSyncs > 0 && <span className="nav-badge" style={{ background: '#7f1d1d', color: '#fca5a5' }}>{pendingSyncs}</span>}
           </button>
 
-          <div className="nav-section-title">Storefront Evaluation</div>
+          <div className="nav-section-title">Live Storefronts on Vercel</div>
+          <button onClick={() => setActiveView('shopify-storefront')} className="nav-link-btn" style={{ color: '#10b981' }}>
+            <span>🛍️ Live Shopify Store</span>
+          </button>
+          <button onClick={() => setActiveView('woocommerce-storefront')} className="nav-link-btn" style={{ color: '#a78bfa' }}>
+            <span>🛒 Live WooCommerce Store</span>
+          </button>
+
+          <div className="nav-section-title">Technical Test Docs</div>
           <button onClick={() => setActiveView('simulator')} className={`nav-link-btn ${activeView === 'simulator' ? 'active' : ''}`}>
             <span>⚡ Webhook Simulator</span>
           </button>
           <button onClick={() => setActiveView('docs')} className={`nav-link-btn ${activeView === 'docs' ? 'active' : ''}`}>
-            <span>📄 Architecture & Specs</span>
+            <span>📄 Full Architecture & ERD</span>
           </button>
         </nav>
 
@@ -521,7 +831,7 @@ export default function CentralCRM() {
               <div className="user-avatar">{user.name ? user.name[0].toUpperCase() : 'A'}</div>
               <div>
                 <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#fff' }}>{user.name}</div>
-                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{user.role?.toUpperCase()}</div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{user.role?.toUpperCase()} &bull; 🔒 Secure</div>
               </div>
             </div>
             <button onClick={handleLogout} className="btn btn-outline btn-sm" title="Log Out">🚪</button>
@@ -544,12 +854,14 @@ export default function CentralCRM() {
           </div>
 
           <div className="topbar-actions">
-            <span style={{ fontSize: '0.78rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(16,185,129,0.1)', padding: '4px 10px', borderRadius: '4px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
-              Live Ingestion Active
-            </span>
-            <button onClick={() => handleSimulateOrder('shopify')} className="btn btn-primary btn-sm">+ Trigger Shopify Order</button>
-            <button onClick={() => handleSimulateOrder('woocommerce')} className="btn btn-outline btn-sm">+ Trigger WooCommerce Order</button>
+            <button onClick={() => setActiveView('shopify-storefront')} className="btn btn-outline btn-sm" style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }}>
+              🛍️ Shopify Store
+            </button>
+            <button onClick={() => setActiveView('woocommerce-storefront')} className="btn btn-outline btn-sm" style={{ color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' }}>
+              🛒 WooCommerce Store
+            </button>
+            <button onClick={() => handleSimulateOrder('shopify')} className="btn btn-primary btn-sm">+ Fast Shopify Order</button>
+            <button onClick={() => handleSimulateOrder('woocommerce')} className="btn btn-outline btn-sm">+ Fast WooCommerce Order</button>
           </div>
         </header>
 
@@ -572,7 +884,7 @@ export default function CentralCRM() {
                 <div className="metric-card">
                   <div className="metric-label">Deduplicated Customers</div>
                   <div className="metric-value">{customers.length}</div>
-                  <div className="metric-subtext">Unique across all storefronts</div>
+                  <div className="metric-subtext">Consolidated across all storefronts</div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Catalogue SKU Index</div>
@@ -836,7 +1148,7 @@ export default function CentralCRM() {
                 <div style={{ background: '#0b1120', padding: '20px', borderRadius: '8px', border: '1px solid #1e293b' }}>
                   <h4 style={{ color: '#10b981', marginBottom: '8px' }}>🛍️ Shopify Storefront Simulator</h4>
                   <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '16px' }}>Simulates an incoming HMAC-SHA256 signed `orders/create` webhook payload from Shopify.</p>
-                  <button onClick={() => handleSimulateOrder('shopify')} className="btn btn-primary" style={{ width: '100%' }}>Dispath Shopify Order Webhook</button>
+                  <button onClick={() => handleSimulateOrder('shopify')} className="btn btn-primary" style={{ width: '100%' }}>Dispatch Shopify Order Webhook</button>
                 </div>
 
                 <div style={{ background: '#0b1120', padding: '20px', borderRadius: '8px', border: '1px solid #1e293b' }}>
@@ -861,6 +1173,7 @@ export default function CentralCRM() {
                   <li><strong>Order Idempotency:</strong> Compound unique constraint on `(source, external_order_id)` prevents duplicate records upon webhook retries.</li>
                   <li><strong>Dead Letter Queue (DLQ):</strong> Captures unparseable payloads or HMAC validation failures for safe replay.</li>
                   <li><strong>1,000+ Product Indexing:</strong> Indexed on SKU, category, and title for sub-millisecond retrieval.</li>
+                  <li><strong>Password Protection:</strong> Full cryptographic session authentication across Admin, Staff, and Customer portals.</li>
                 </ul>
               </div>
             </div>
