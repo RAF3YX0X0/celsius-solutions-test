@@ -18,22 +18,17 @@ export default function CentralCRM() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
 
-  // Store Datasets
+  // Modals
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [showNewProductModal, setShowNewProductModal] = useState(false);
+
+  // Datasets
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [failures, setFailures] = useState([]);
   const [notification, setNotification] = useState(null);
-
-  // Storefront Simulation State
-  const [storefrontCart, setStorefrontCart] = useState([
-    { id: 'prod_1', name: 'Cold Pressed Raw Milk', sku: 'STB-RAW-0001', price: 29.99, quantity: 2, image: '/assets/images/prod_raw_milk.jpg' }
-  ]);
-  const [storefrontStep, setStorefrontStep] = useState('shop'); // 'shop' | 'checkout' | 'success'
-  const [checkoutEmail, setCheckoutEmail] = useState('marcus.vance@techcorp.io');
-  const [checkoutName, setCheckoutName] = useState('Marcus Vance');
-  const [checkoutPhone, setCheckoutPhone] = useState('+1 (555) 302-8819');
-  const [checkoutAddress, setCheckoutAddress] = useState('2464 Royal Ln, Mesa, NJ 07001');
 
   // Filters & Search
   const [orderSearch, setOrderSearch] = useState('');
@@ -42,6 +37,35 @@ export default function CentralCRM() {
   const [productSearch, setProductSearch] = useState('');
   const [productCategory, setProductCategory] = useState('all');
   const [productPage, setProductPage] = useState(1);
+  const [customerSearch, setCustomerSearch] = useState('');
+
+  // New Order Form State
+  const [newOrderForm, setNewOrderForm] = useState({
+    customerEmail: 'marcus.vance@techcorp.io',
+    customerName: 'Marcus Vance',
+    source: 'shopify',
+    productId: 'prod_1',
+    quantity: 2,
+    status: 'processing'
+  });
+
+  // New Customer Form State
+  const [newCustomerForm, setNewCustomerForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    notes: ''
+  });
+
+  // New Product Form State
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    sku: '',
+    category: 'Raw & Unpasteurized',
+    price: 19.99,
+    stockQuantity: 50
+  });
 
   // Toast Notification
   const showToast = (msg, type = 'success') => {
@@ -96,6 +120,8 @@ export default function CentralCRM() {
         shipping: 0,
         total: 64.78,
         currency: 'USD',
+        billing_address: { address1: '2464 Royal Ln', city: 'Mesa', state: 'NJ', zip: '07001' },
+        shipping_address: { address1: '2464 Royal Ln', city: 'Mesa', state: 'NJ', zip: '07001' },
         created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
         items: [
           { id: 'item_1', title: 'Cold Pressed Raw Milk', sku: 'STB-RAW-0001', quantity: 2, price: 29.99, total: 59.98, img: '/assets/images/prod_raw_milk.jpg' }
@@ -115,6 +141,8 @@ export default function CentralCRM() {
         shipping: 0,
         total: 43.18,
         currency: 'USD',
+        billing_address: { address1: '782 Market St', city: 'San Francisco', state: 'CA', zip: '94103' },
+        shipping_address: { address1: '782 Market St', city: 'San Francisco', state: 'CA', zip: '94103' },
         created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
         items: [
           { id: 'item_2', title: 'Barista Reserve Full Cream Milk', sku: 'STB-FUL-0002', quantity: 2, price: 19.99, total: 39.98, img: '/assets/images/prod_full_cream.jpg' }
@@ -134,6 +162,8 @@ export default function CentralCRM() {
         shipping: 0,
         total: 21.59,
         currency: 'USD',
+        billing_address: { address1: '120 Broadway', city: 'New York', state: 'NY', zip: '10005' },
+        shipping_address: { address1: '120 Broadway', city: 'New York', state: 'NY', zip: '10005' },
         created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
         items: [
           { id: 'item_3', title: 'Traditional Cultured Whole Milk Kefir', sku: 'STB-KEF-0004', quantity: 1, price: 19.99, total: 19.99, img: '/assets/images/prod_milk_kefir.jpg' }
@@ -188,6 +218,9 @@ export default function CentralCRM() {
     setSelectedOrder(null);
     setSelectedCustomer(null);
     setEditingProduct(null);
+    setShowNewOrderModal(false);
+    setShowNewCustomerModal(false);
+    setShowNewProductModal(false);
     setAuthError('');
     showToast('Signed out of session.', 'info');
   };
@@ -195,6 +228,98 @@ export default function CentralCRM() {
   const handleOrderStatusUpdate = (orderId, newStatus) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     showToast(`Order status updated to ${newStatus.toUpperCase()}`);
+  };
+
+  const handleCreateOrder = (e) => {
+    e.preventDefault();
+    const selectedProd = products.find(p => p.id === newOrderForm.productId) || products[0];
+    const subtotal = selectedProd.price * newOrderForm.quantity;
+    const tax = subtotal * 0.08;
+    const total = subtotal + tax;
+    const num = newOrderForm.source === 'shopify' ? '#SH-' + Math.floor(1000 + Math.random() * 9000) : '#WC-' + Math.floor(1000 + Math.random() * 9000);
+
+    const newOrd = {
+      id: 'ord_' + Date.now(),
+      order_number: num,
+      source: newOrderForm.source,
+      customer_id: 'cust_' + Date.now(),
+      customer_name: newOrderForm.customerName,
+      customer_email: newOrderForm.customerEmail,
+      status: newOrderForm.status,
+      payment_status: 'paid',
+      subtotal,
+      tax,
+      shipping: 0,
+      total,
+      currency: 'USD',
+      billing_address: { address1: '2464 Royal Ln', city: 'Mesa', state: 'NJ', zip: '07001' },
+      shipping_address: { address1: '2464 Royal Ln', city: 'Mesa', state: 'NJ', zip: '07001' },
+      created_at: new Date().toISOString(),
+      items: [
+        { id: 'item_' + Date.now(), title: selectedProd.name, sku: selectedProd.sku, quantity: newOrderForm.quantity, price: selectedProd.price, total: subtotal, img: selectedProd.image }
+      ]
+    };
+
+    setOrders(prev => [newOrd, ...prev]);
+
+    // Customer Deduplication
+    setCustomers(prev => {
+      const exists = prev.find(c => c.email.toLowerCase() === newOrderForm.customerEmail.toLowerCase());
+      if (exists) {
+        return prev.map(c => c.email.toLowerCase() === newOrderForm.customerEmail.toLowerCase() ? { ...c, orders_count: c.orders_count + 1, total_spent: c.total_spent + total } : c);
+      }
+      return [{ id: 'cust_' + Date.now(), email: newOrderForm.customerEmail, first_name: newOrderForm.customerName.split(' ')[0], last_name: newOrderForm.customerName.split(' ')[1] || '', phone: '+1 555-0192', notes: 'Created via CRM admin panel', total_spent: total, orders_count: 1, created_at: new Date().toISOString() }, ...prev];
+    });
+
+    setShowNewOrderModal(false);
+    showToast(`Order ${num} created successfully!`);
+  };
+
+  const handleCreateCustomer = (e) => {
+    e.preventDefault();
+    if (!newCustomerForm.email) return;
+
+    const exists = customers.find(c => c.email.toLowerCase() === newCustomerForm.email.toLowerCase());
+    if (exists) {
+      showToast(`Customer with email ${newCustomerForm.email} already exists!`, 'error');
+      return;
+    }
+
+    const newCust = {
+      id: 'cust_' + Date.now(),
+      email: newCustomerForm.email.trim().toLowerCase(),
+      first_name: newCustomerForm.firstName,
+      last_name: newCustomerForm.lastName,
+      phone: newCustomerForm.phone || '+1 555-0100',
+      notes: newCustomerForm.notes || 'Created via Admin Directory',
+      total_spent: 0,
+      orders_count: 0,
+      created_at: new Date().toISOString()
+    };
+
+    setCustomers(prev => [newCust, ...prev]);
+    setNewCustomerForm({ firstName: '', lastName: '', email: '', phone: '', notes: '' });
+    setShowNewCustomerModal(false);
+    showToast(`Customer account created for ${newCust.email}!`);
+  };
+
+  const handleCreateProduct = (e) => {
+    e.preventDefault();
+    const newProd = {
+      id: 'prod_' + (products.length + 1),
+      sku: newProductForm.sku || `STB-NEW-${String(products.length + 1).padStart(4, '0')}`,
+      name: newProductForm.name,
+      category: newProductForm.category,
+      price: parseFloat(newProductForm.price),
+      sale_price: null,
+      stock_quantity: parseInt(newProductForm.stockQuantity, 10) || 50,
+      image: '/assets/images/prod_raw_milk.jpg'
+    };
+
+    setProducts(prev => [newProd, ...prev]);
+    setNewProductForm({ name: '', sku: '', category: 'Raw & Unpasteurized', price: 19.99, stockQuantity: 50 });
+    setShowNewProductModal(false);
+    showToast(`Product ${newProd.sku} added to catalogue inventory!`);
   };
 
   const handleUpdateProductStock = (e) => {
@@ -212,12 +337,17 @@ export default function CentralCRM() {
     showToast(`Customer account profile saved for ${selectedCustomer.email}!`);
   };
 
+  const handleDeleteProduct = (productId) => {
+    setProducts(prev => prev.filter(p => p.id !== productId));
+    showToast('Product removed from catalogue inventory.');
+  };
+
   const handleRetryFailure = (failureId) => {
     setFailures(prev => prev.map(f => f.id === failureId ? { ...f, status: 'resolved' } : f));
     showToast(`Dead Letter Queue event #${failureId} successfully resolved!`);
   };
 
-  const handleSimulateOrder = async (source) => {
+  const handleSimulateOrder = (source) => {
     const num = source === 'shopify' ? '#SH-' + Math.floor(1000 + Math.random() * 9000) : '#WC-' + Math.floor(1000 + Math.random() * 9000);
     const names = ['Claire Dubois', 'Guillaume Lefevre', 'Sofia Rossi', 'Liam O\'Connor', 'Marcus Vance'];
     const randName = names[Math.floor(Math.random() * names.length)];
@@ -237,6 +367,8 @@ export default function CentralCRM() {
       shipping: 0,
       total: 43.18,
       currency: 'USD',
+      billing_address: { address1: '2464 Royal Ln', city: 'Mesa', state: 'NJ', zip: '07001' },
+      shipping_address: { address1: '2464 Royal Ln', city: 'Mesa', state: 'NJ', zip: '07001' },
       created_at: new Date().toISOString(),
       items: [
         { id: 'item_' + Date.now(), title: 'Cold Pressed Raw Milk', sku: 'STB-RAW-0001', quantity: 2, price: 19.99, total: 39.98, img: '/assets/images/prod_raw_milk.jpg' }
@@ -251,64 +383,10 @@ export default function CentralCRM() {
       if (exists) {
         return prev.map(c => c.email.toLowerCase() === randEmail.toLowerCase() ? { ...c, orders_count: c.orders_count + 1, total_spent: c.total_spent + 43.18 } : c);
       }
-      return [{ id: 'cust_' + Date.now(), email: randEmail, first_name: randName.split(' ')[0], last_name: randName.split(' ')[1] || '', phone: '+1 (555) 0192', notes: 'Created via live storefront', total_spent: 43.18, orders_count: 1, created_at: new Date().toISOString() }, ...prev];
+      return [{ id: 'cust_' + Date.now(), email: randEmail, first_name: randName.split(' ')[0], last_name: randName.split(' ')[1] || '', phone: '+1 (555) 0192', notes: 'Ingested from storefront webhook', total_spent: 43.18, orders_count: 1, created_at: new Date().toISOString() }, ...prev];
     });
 
     showToast(`⚡ Live ${source.toUpperCase()} Webhook Ingested: Order ${num}`);
-  };
-
-  const handleStorefrontAddToCart = (product) => {
-    setStorefrontCart(prev => {
-      const exists = prev.find(i => i.sku === product.sku);
-      if (exists) {
-        return prev.map(i => i.sku === product.sku ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-    showToast(`Added 1x ${product.name} to Basket!`);
-  };
-
-  const handleStorefrontCheckoutSubmit = (e, source) => {
-    e.preventDefault();
-    const num = source === 'shopify' ? '#SH-' + Math.floor(1000 + Math.random() * 9000) : '#WC-' + Math.floor(1000 + Math.random() * 9000);
-    const subtotal = storefrontCart.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 59.98;
-    const tax = subtotal * 0.08;
-    const total = subtotal + tax;
-
-    const newOrd = {
-      id: 'ord_' + Date.now(),
-      order_number: num,
-      source,
-      customer_id: 'cust_' + Date.now(),
-      customer_name: checkoutName,
-      customer_email: checkoutEmail,
-      status: 'processing',
-      payment_status: 'paid',
-      subtotal,
-      tax,
-      shipping: 0,
-      total,
-      currency: 'USD',
-      created_at: new Date().toISOString(),
-      items: storefrontCart.length > 0 ? storefrontCart.map(i => ({ id: 'item_' + Date.now(), title: i.name, sku: i.sku, quantity: i.quantity, price: i.price, total: i.price * i.quantity, img: i.image })) : [
-        { id: 'item_1', title: 'Cold Pressed Raw Milk', sku: 'STB-RAW-0001', quantity: 2, price: 29.99, total: 59.98, img: '/assets/images/prod_raw_milk.jpg' }
-      ]
-    };
-
-    setOrders(prev => [newOrd, ...prev]);
-
-    // Customer deduplication
-    setCustomers(prev => {
-      const exists = prev.find(c => c.email.toLowerCase() === checkoutEmail.toLowerCase());
-      if (exists) {
-        return prev.map(c => c.email.toLowerCase() === checkoutEmail.toLowerCase() ? { ...c, orders_count: c.orders_count + 1, total_spent: c.total_spent + total } : c);
-      }
-      return [{ id: 'cust_' + Date.now(), email: checkoutEmail, first_name: checkoutName.split(' ')[0], last_name: checkoutName.split(' ')[1] || '', phone: checkoutPhone, notes: 'Express checkout customer', total_spent: total, orders_count: 1, created_at: new Date().toISOString() }, ...prev];
-    });
-
-    setStorefrontCart([]);
-    setStorefrontStep('success');
-    showToast(`🎉 Order ${num} Placed! Webhook dispatched to CRM & Supabase.`);
   };
 
   // KPIs
@@ -329,6 +407,15 @@ export default function CentralCRM() {
     return true;
   });
 
+  // Filtered Customers
+  const filteredCustomers = customers.filter(c => {
+    if (customerSearch) {
+      const q = customerSearch.toLowerCase();
+      return c.email.toLowerCase().includes(q) || `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) || (c.phone && c.phone.includes(q));
+    }
+    return true;
+  });
+
   // Filtered Products (1,000+ Items)
   const filteredProducts = products.filter(p => {
     if (productCategory !== 'all' && p.category !== productCategory) return false;
@@ -343,23 +430,17 @@ export default function CentralCRM() {
   // -------------------------------------------------------------------------
   // RENDER: Front-Door Dual-Role Login Portal (Password Protected)
   // -------------------------------------------------------------------------
-  if (!user && activeView !== 'shopify-storefront' && activeView !== 'woocommerce-storefront') {
+  if (!user) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#090d16', padding: '20px' }}>
         <Head>
           <title>Central CRM &bull; Password Protected Access Portal</title>
         </Head>
 
-        {/* Top Quick Links to Live Storefronts */}
+        {/* Top Header Actions */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button onClick={() => setActiveView('shopify-storefront')} className="btn btn-outline btn-sm" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-            🛍️ Open Live Shopify Storefront &rarr;
-          </button>
-          <button onClick={() => setActiveView('woocommerce-storefront')} className="btn btn-outline btn-sm" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: 'rgba(139, 92, 246, 0.3)' }}>
-            🛒 Open Live WooCommerce Storefront &rarr;
-          </button>
           <a href="/Celsius_Solutions_Technical_Assessment_Documentation.pdf" download className="btn btn-outline btn-sm" style={{ color: '#e5b94c', borderColor: 'rgba(229, 185, 76, 0.3)' }}>
-            📄 Download Master PDF
+            📄 Download Master PDF Documentation
           </a>
         </div>
 
@@ -369,7 +450,7 @@ export default function CentralCRM() {
               <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#60a5fa' }}>🔒 100% SECURE & PASSWORD PROTECTED</span>
             </div>
             <h1 style={{ fontSize: '1.45rem', fontWeight: '800', color: '#f8fafc', letterSpacing: '-0.02em', marginBottom: '4px' }}>Central CRM Access Portal</h1>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Multi-Store Single Source of Truth</p>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Multi-Store Orders & Inventory Single Source of Truth</p>
           </div>
 
           {authError && (
@@ -472,238 +553,6 @@ export default function CentralCRM() {
             </form>
           )}
         </div>
-      </div>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // RENDER: FULL FIDELITY LIVE SHOPIFY & WOOCOMMERCE STOREFRONTS
-  // -------------------------------------------------------------------------
-  if (activeView === 'shopify-storefront' || activeView === 'woocommerce-storefront') {
-    const isShopify = activeView === 'shopify-storefront';
-    const storeTitle = isShopify ? 'St. Benoit &bull; Shopify Online Store 2.0' : 'St. Benoit &bull; WooCommerce Pasture Dairy';
-    const storeBadge = isShopify ? 'SHOPIFY STOREFRONT (ONLINE STORE 2.0)' : 'WOOCOMMERCE STOREFRONT (CUSTOM THEME)';
-    const badgeColor = isShopify ? '#10b981' : '#8b5cf6';
-
-    const subtotal = storefrontCart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-    const tax = subtotal * 0.08;
-    const total = subtotal + tax;
-
-    return (
-      <div style={{ minHeight: '100vh', background: '#faf9f6', color: '#1a1a1a', fontFamily: 'var(--font-sans)' }}>
-        <Head>
-          <title>{storeTitle}</title>
-        </Head>
-
-        {/* Storefront Top Navigation Bar */}
-        <header style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <span className="badge" style={{ background: isShopify ? 'rgba(16,185,129,0.1)' : 'rgba(139,92,246,0.1)', color: badgeColor, border: `1px solid ${badgeColor}`, fontWeight: '800' }}>
-              {storeBadge}
-            </span>
-            <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#1e3a1e' }}>St. Benoit Organic Dairy</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button onClick={() => setStorefrontStep('shop')} style={{ background: 'none', border: 'none', fontWeight: '700', color: '#4b5563', cursor: 'pointer', fontSize: '0.88rem' }}>
-              Collection (1,000+)
-            </button>
-            <button onClick={() => setStorefrontStep('checkout')} className="btn btn-outline btn-sm" style={{ color: '#1e3a1e', fontWeight: '700' }}>
-              🛒 Basket ({storefrontCart.reduce((s, i) => s + i.quantity, 0)}) &bull; ${subtotal.toFixed(2)}
-            </button>
-            <button onClick={() => { setActiveView('dashboard'); if (!user) setUser({ name: 'Alexander Wright', email: 'admin@crm.local', role: 'admin' }); }} className="btn btn-primary btn-sm">
-              🛡️ Return to CRM Dashboard &rarr;
-            </button>
-          </div>
-        </header>
-
-        <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '30px 20px 80px 20px' }}>
-          {storefrontStep === 'shop' && (
-            <div>
-              {/* Full Brand Hero Section with Real Bottle Artwork */}
-              <div style={{ background: 'linear-gradient(135deg, #1b3d18 0%, #2d5a27 100%)', color: '#ffffff', borderRadius: '12px', padding: '40px 30px', marginBottom: '36px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px', alignItems: 'center' }}>
-                <div>
-                  <span style={{ background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    🌱 100% Pasture-Raised in Sonoma County
-                  </span>
-                  <h2 style={{ fontSize: '2.5rem', fontWeight: '900', marginTop: '10px', marginBottom: '12px', lineHeight: '1.15' }}>
-                    Pure, Cold-Pressed <br /><span style={{ color: '#e5b94c' }}>Farmstead Milk</span>
-                  </h2>
-                  <p style={{ color: '#e2e8f0', fontSize: '1rem', lineHeight: '1.6', marginBottom: '24px' }}>
-                    Non-homogenized, organic clover pasture milk with natural cream-on-top. Every purchase dispatches authentic HMAC webhooks to **Central CRM** and **Supabase**.
-                  </p>
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <button onClick={() => setStorefrontStep('checkout')} className="btn btn-primary" style={{ background: '#e5b94c', color: '#1b3d18', fontWeight: '900', padding: '14px 28px' }}>
-                      Proceed to Express Checkout &rarr;
-                    </button>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <img src="/assets/images/prod_raw_milk.jpg" alt="Heritage Raw Milk" style={{ maxHeight: '280px', width: 'auto', objectFit: 'contain', filter: 'drop-shadow(0 20px 30px rgba(0,0,0,0.4))' }} />
-                </div>
-              </div>
-
-              {/* 3 Quality Pillars */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', background: '#f4efe6', padding: '24px', borderRadius: '8px', marginBottom: '36px', border: '1px solid #e2d9cc' }}>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <span style={{ fontSize: '1.8rem' }}>🌿</span>
-                  <div>
-                    <strong style={{ display: 'block', color: '#2d5a27', fontSize: '0.95rem' }}>100% Clover Grass-Fed</strong>
-                    <span style={{ fontSize: '0.8rem', color: '#555' }}>Pasture grazed cows on coastal sweet clover.</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <span style={{ fontSize: '1.8rem' }}>🥛</span>
-                  <div>
-                    <strong style={{ display: 'block', color: '#2d5a27', fontSize: '0.95rem' }}>Natural Cream-on-Top</strong>
-                    <span style={{ fontSize: '0.8rem', color: '#555' }}>Non-homogenized with pure golden cream float.</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <span style={{ fontSize: '1.8rem' }}>🚚</span>
-                  <div>
-                    <strong style={{ display: 'block', color: '#2d5a27', fontSize: '0.95rem' }}>36.4°F Cold-Chain Telemetry</strong>
-                    <span style={{ fontSize: '0.8rem', color: '#555' }}>Real-time sensor tracking inside Central CRM.</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Product Catalogue Grid with Real Images */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1e3a1e' }}>Flagship Dairy Milks (1,000+ Items)</h3>
-                  <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Click "Add to Cart" or "Buy Now" to test live webhook ingestion</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
-                {products.slice(0, 8).map(p => (
-                  <div key={p.id} style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '18px', display: 'flex', flexDirection: 'column', transition: 'transform 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
-                    <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: '6px', marginBottom: '14px', padding: '10px' }}>
-                      <img src={p.image} alt={p.name} style={{ maxHeight: '160px', width: 'auto', objectFit: 'contain' }} />
-                    </div>
-                    <div style={{ fontSize: '0.72rem', fontWeight: '800', color: badgeColor, textTransform: 'uppercase' }}>{p.category}</div>
-                    <div style={{ fontSize: '1.05rem', fontWeight: '800', margin: '4px 0 8px 0', color: '#1a1a1a' }}>{p.name}</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', marginBottom: '14px' }}>
-                      <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#1e3a1e' }}>${p.price.toFixed(2)}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontFamily: 'monospace' }}>{p.sku}</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <button onClick={() => handleStorefrontAddToCart(p)} className="btn btn-outline btn-sm">+ Add to Cart</button>
-                      <button onClick={() => { handleStorefrontAddToCart(p); setStorefrontStep('checkout'); }} className="btn btn-primary btn-sm" style={{ background: badgeColor }}>
-                        Buy Now &rarr;
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {storefrontStep === 'checkout' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '30px', alignItems: 'start' }}>
-              {/* Checkout Form */}
-              <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '30px' }}>
-                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
-                  ⚡ {isShopify ? 'Shopify Express 2-Column Checkout' : 'WooCommerce Dedicated Checkout'}
-                </h3>
-                <form onSubmit={(e) => handleStorefrontCheckoutSubmit(e, isShopify ? 'shopify' : 'woocommerce')}>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Customer Email (Deduplication Key)</label>
-                    <input
-                      type="email"
-                      value={checkoutEmail}
-                      onChange={(e) => setCheckoutEmail(e.target.value)}
-                      required
-                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Customer Full Name</label>
-                    <input
-                      type="text"
-                      value={checkoutName}
-                      onChange={(e) => setCheckoutName(e.target.value)}
-                      required
-                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Phone Number</label>
-                    <input
-                      type="text"
-                      value={checkoutPhone}
-                      onChange={(e) => setCheckoutPhone(e.target.value)}
-                      required
-                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '6px' }}>Cold-Chain Delivery Address</label>
-                    <input
-                      type="text"
-                      value={checkoutAddress}
-                      onChange={(e) => setCheckoutAddress(e.target.value)}
-                      required
-                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
-                    />
-                  </div>
-
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '14px', background: badgeColor, fontWeight: '800', fontSize: '1rem' }}>
-                    Complete Purchase &bull; Dispatch Webhook to CRM &rarr;
-                  </button>
-                </form>
-              </div>
-
-              {/* Summary */}
-              <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '24px' }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '14px' }}>Order Summary ({storefrontCart.reduce((s, i) => s + i.quantity, 0)} items)</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.9rem', marginBottom: '18px' }}>
-                  {storefrontCart.length > 0 ? storefrontCart.map((i, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <img src={i.image || '/assets/images/prod_raw_milk.jpg'} alt={i.name} style={{ width: '38px', height: '38px', objectFit: 'contain', background: '#fafafa', borderRadius: '4px' }} />
-                        <span>{i.quantity}x {i.name}</span>
-                      </div>
-                      <span style={{ fontWeight: '700' }}>${(i.price * i.quantity).toFixed(2)}</span>
-                    </div>
-                  )) : (
-                    <div style={{ color: '#6b7280' }}>2x Cold Pressed Raw Milk ($59.98)</div>
-                  )}
-                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Cold-Chain Express Shipping (36.4°F)</span>
-                    <span style={{ color: '#10b981', fontWeight: '700' }}>FREE</span>
-                  </div>
-                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', fontWeight: '900' }}>
-                    <span>Total</span>
-                    <span style={{ color: '#1e3a1e' }}>${(total || 64.78).toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {storefrontStep === 'success' && (
-            <div style={{ textAlign: 'center', background: '#ffffff', padding: '50px 20px', borderRadius: '12px', border: '1px solid #e5e7eb', maxWidth: '600px', margin: '0 auto' }}>
-              <div style={{ fontSize: '3.5rem', marginBottom: '12px' }}>✅</div>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#1e3a1e', marginBottom: '8px' }}>Order Placed & Ingested!</h2>
-              <p style={{ color: '#4b5563', marginBottom: '24px' }}>
-                The live webhook was received by **Central CRM** and recorded in **Supabase**. You can now view the order in the Admin Dashboard or track it in the Customer Portal.
-              </p>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => { setActiveView('orders'); setUser({ name: 'Alexander Wright', email: 'admin@crm.local', role: 'admin' }); }} className="btn btn-primary">
-                  View in CRM Admin Dashboard &rarr;
-                </button>
-                <button onClick={() => { setActiveView('customer-portal'); setUser({ name: checkoutName, email: checkoutEmail, role: 'customer' }); }} className="btn btn-outline" style={{ color: '#1e3a1e' }}>
-                  Track in Customer Portal &rarr;
-                </button>
-              </div>
-            </div>
-          )}
-        </main>
       </div>
     );
   }
@@ -823,12 +672,12 @@ export default function CentralCRM() {
   return (
     <div className="app-container">
       <Head>
-        <title>Executive CRM & Multi-Store Order Synchronization</title>
+        <title>Executive CRM &bull; Multi-Store Order & Inventory Management</title>
       </Head>
 
       {/* Toast Notification */}
       {notification && (
-        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 9999, background: notification.type === 'info' ? '#1e293b' : '#065f46', color: '#fff', padding: '12px 18px', borderRadius: '6px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', fontSize: '0.85rem', fontWeight: '700', border: '1px solid rgba(255,255,255,0.2)' }}>
+        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 9999, background: notification.type === 'error' ? '#991b1b' : (notification.type === 'info' ? '#1e293b' : '#065f46'), color: '#fff', padding: '12px 18px', borderRadius: '6px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', fontSize: '0.85rem', fontWeight: '700', border: '1px solid rgba(255,255,255,0.2)' }}>
           {notification.msg}
         </div>
       )}
@@ -844,41 +693,33 @@ export default function CentralCRM() {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-title">Core Modules</div>
+          <div className="nav-section-title">Core CRM Modules</div>
           <button onClick={() => setActiveView('dashboard')} className={`nav-link-btn ${activeView === 'dashboard' ? 'active' : ''}`}>
             <span>📊 Dashboard & KPIs</span>
           </button>
           <button onClick={() => setActiveView('orders')} className={`nav-link-btn ${activeView === 'orders' ? 'active' : ''}`}>
-            <span>📦 Unified Orders Feed</span>
+            <span>📦 Order Management</span>
             <span className="nav-badge">{orders.length}</span>
           </button>
           <button onClick={() => setActiveView('customers')} className={`nav-link-btn ${activeView === 'customers' ? 'active' : ''}`}>
-            <span>👥 Customer Directory</span>
+            <span>👥 Customer Accounts</span>
             <span className="nav-badge">{customers.length}</span>
           </button>
           <button onClick={() => setActiveView('products')} className={`nav-link-btn ${activeView === 'products' ? 'active' : ''}`}>
             <span>🥛 Products & Inventory</span>
-            <span className="nav-badge">1,000+</span>
+            <span className="nav-badge">{products.length}</span>
           </button>
           <button onClick={() => setActiveView('dlq')} className={`nav-link-btn ${activeView === 'dlq' ? 'active' : ''}`}>
             <span>⚠️ Dead Letter Queue</span>
             {pendingSyncs > 0 && <span className="nav-badge" style={{ background: '#7f1d1d', color: '#fca5a5' }}>{pendingSyncs}</span>}
           </button>
 
-          <div className="nav-section-title">Live Storefronts on Vercel</div>
-          <button onClick={() => setActiveView('shopify-storefront')} className="nav-link-btn" style={{ color: '#10b981' }}>
-            <span>🛍️ Live Shopify Store</span>
-          </button>
-          <button onClick={() => setActiveView('woocommerce-storefront')} className="nav-link-btn" style={{ color: '#a78bfa' }}>
-            <span>🛒 Live WooCommerce Store</span>
-          </button>
-
-          <div className="nav-section-title">Technical Test Docs</div>
+          <div className="nav-section-title">Storefront Integrations</div>
           <button onClick={() => setActiveView('simulator')} className={`nav-link-btn ${activeView === 'simulator' ? 'active' : ''}`}>
             <span>⚡ Webhook Simulator</span>
           </button>
           <button onClick={() => setActiveView('docs')} className={`nav-link-btn ${activeView === 'docs' ? 'active' : ''}`}>
-            <span>📄 Full Architecture & ERD</span>
+            <span>📄 Architecture & Specs</span>
           </button>
         </nav>
 
@@ -902,23 +743,26 @@ export default function CentralCRM() {
         <header className="app-topbar">
           <div className="topbar-title">
             {activeView === 'dashboard' && 'Executive KPIs & Real-Time Sync'}
-            {activeView === 'orders' && 'Unified Multi-Store Orders'}
+            {activeView === 'orders' && 'Multi-Store Order Management'}
             {activeView === 'customers' && 'Customer Directory & Accounts'}
-            {activeView === 'products' && 'Inventory Management (1,000+ Items)'}
+            {activeView === 'products' && 'Inventory & Product Catalogue (1,000+ Items)'}
             {activeView === 'dlq' && 'Dead Letter Queue (Failure Handling)'}
             {activeView === 'simulator' && 'Storefront Webhook Simulator'}
             {activeView === 'docs' && 'Technical Specification & Schema'}
           </div>
 
           <div className="topbar-actions">
-            <button onClick={() => setActiveView('shopify-storefront')} className="btn btn-outline btn-sm" style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }}>
-              🛍️ Shopify Store
-            </button>
-            <button onClick={() => setActiveView('woocommerce-storefront')} className="btn btn-outline btn-sm" style={{ color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' }}>
-              🛒 WooCommerce Store
-            </button>
+            {activeView === 'orders' && (
+              <button onClick={() => setShowNewOrderModal(true)} className="btn btn-primary btn-sm">+ Create New Order</button>
+            )}
+            {activeView === 'customers' && (
+              <button onClick={() => setShowNewCustomerModal(true)} className="btn btn-primary btn-sm">+ Add New Customer</button>
+            )}
+            {activeView === 'products' && (
+              <button onClick={() => setShowNewProductModal(true)} className="btn btn-primary btn-sm">+ Add New Product</button>
+            )}
             <a href="/Celsius_Solutions_Technical_Assessment_Documentation.pdf" download className="btn btn-outline btn-sm" style={{ color: '#e5b94c', borderColor: 'rgba(229,185,76,0.3)' }}>
-              📄 Download PDF
+              📄 Download PDF Spec
             </a>
           </div>
         </header>
@@ -946,16 +790,30 @@ export default function CentralCRM() {
                 </div>
                 <div className="metric-card">
                   <div className="metric-label">Catalogue SKU Index</div>
-                  <div className="metric-value">1,000+</div>
+                  <div className="metric-value">{products.length}</div>
                   <div className="metric-subtext">Organic Pasture Dairy Items</div>
+                </div>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div style={{ background: '#131b2e', border: '1px solid #1e293b', borderRadius: '8px', padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Quick Actions:</span>
+                  <button onClick={() => setShowNewOrderModal(true)} className="btn btn-primary btn-sm">+ Manual Order</button>
+                  <button onClick={() => setShowNewCustomerModal(true)} className="btn btn-outline btn-sm">+ New Customer</button>
+                  <button onClick={() => setShowNewProductModal(true)} className="btn btn-outline btn-sm">+ New Product</button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => handleSimulateOrder('shopify')} className="btn btn-outline btn-sm" style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }}>+ Test Shopify Webhook</button>
+                  <button onClick={() => handleSimulateOrder('woocommerce')} className="btn btn-outline btn-sm" style={{ color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' }}>+ Test WooCommerce Webhook</button>
                 </div>
               </div>
 
               {/* Recent Orders Card */}
               <div className="card">
                 <div className="card-header">
-                  <h3 className="card-title">Live Ingested Orders</h3>
-                  <button onClick={() => setActiveView('orders')} className="btn btn-outline btn-sm">View All Orders &rarr;</button>
+                  <h3 className="card-title">Live Ingested Orders Feed</h3>
+                  <button onClick={() => setActiveView('orders')} className="btn btn-outline btn-sm">Manage All Orders &rarr;</button>
                 </div>
                 <div className="table-responsive">
                   <table className="enterprise-table">
@@ -994,7 +852,7 @@ export default function CentralCRM() {
             </div>
           )}
 
-          {/* VIEW 2: ORDERS */}
+          {/* VIEW 2: ORDERS MANAGEMENT */}
           {activeView === 'orders' && (
             <div className="card">
               <div className="card-header" style={{ flexWrap: 'wrap', gap: '10px' }}>
@@ -1018,6 +876,7 @@ export default function CentralCRM() {
                     <option value="woocommerce">WooCommerce</option>
                   </select>
                 </div>
+                <button onClick={() => setShowNewOrderModal(true)} className="btn btn-primary btn-sm">+ Create Order</button>
               </div>
 
               <div className="table-responsive">
@@ -1029,7 +888,7 @@ export default function CentralCRM() {
                       <th>Customer Email</th>
                       <th>Total</th>
                       <th>Date</th>
-                      <th>Sync Status</th>
+                      <th>Status Transition</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -1066,9 +925,19 @@ export default function CentralCRM() {
           {/* VIEW 3: CUSTOMERS & ACCOUNT MANAGEMENT */}
           {activeView === 'customers' && (
             <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Customer Account Management & Deduplication ({customers.length})</h3>
+              <div className="card-header" style={{ flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', flex: 1 }}>
+                  <input
+                    type="text"
+                    placeholder="Search customers by name, email, phone..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    style={{ flex: 1, padding: '8px 12px', background: '#0b1120', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <button onClick={() => setShowNewCustomerModal(true)} className="btn btn-primary btn-sm">+ New Customer</button>
               </div>
+
               <div className="table-responsive">
                 <table className="enterprise-table">
                   <thead>
@@ -1082,7 +951,7 @@ export default function CentralCRM() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map(c => (
+                    {filteredCustomers.map(c => (
                       <tr key={c.id}>
                         <td style={{ fontWeight: '700' }}>{c.first_name} {c.last_name}</td>
                         <td style={{ fontFamily: 'var(--font-mono)' }}>{c.email}</td>
@@ -1122,7 +991,7 @@ export default function CentralCRM() {
                     <option value="Artisan Creamery">Artisan Creamery</option>
                   </select>
                 </div>
-                <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Showing {paginatedProducts.length} of {filteredProducts.length} items</div>
+                <button onClick={() => setShowNewProductModal(true)} className="btn btn-primary btn-sm">+ Add Product</button>
               </div>
 
               <div className="table-responsive">
@@ -1145,12 +1014,15 @@ export default function CentralCRM() {
                         <td><span className="badge" style={{ background: '#1e293b', color: '#cbd5e1' }}>{p.category}</span></td>
                         <td style={{ fontWeight: '700' }}>${p.price.toFixed(2)}</td>
                         <td>
-                          <span className={`badge ${p.stock_quantity > 0 ? 'badge-status-completed' : 'badge-status-cancelled'}`}>
-                            {p.stock_quantity} units
+                          <span className={`badge ${p.stock_quantity > 10 ? 'badge-status-completed' : (p.stock_quantity > 0 ? 'badge-status-pending' : 'badge-status-cancelled')}`}>
+                            {p.stock_quantity > 0 ? `${p.stock_quantity} in stock` : 'Out of stock'}
                           </span>
                         </td>
                         <td>
-                          <button onClick={() => setEditingProduct(p)} className="btn btn-outline btn-sm">Edit Inventory</button>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button onClick={() => setEditingProduct(p)} className="btn btn-outline btn-sm">Edit</button>
+                            <button onClick={() => handleDeleteProduct(p.id)} className="btn btn-outline btn-sm" style={{ color: '#f87171' }}>Delete</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1252,7 +1124,136 @@ export default function CentralCRM() {
         </div>
       </main>
 
-      {/* Product Stock Edit Modal */}
+      {/* CREATE ORDER MODAL */}
+      {showNewOrderModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ width: '100%', maxWidth: '520px', background: '#131b2e', border: '1px solid #334155', borderRadius: '12px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>Create New Manual Order</h3>
+            <form onSubmit={handleCreateOrder}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Customer Email</label>
+                <input type="email" required value={newOrderForm.customerEmail} onChange={(e) => setNewOrderForm({ ...newOrderForm, customerEmail: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Customer Name</label>
+                  <input type="text" required value={newOrderForm.customerName} onChange={(e) => setNewOrderForm({ ...newOrderForm, customerName: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Storefront Channel</label>
+                  <select value={newOrderForm.source} onChange={(e) => setNewOrderForm({ ...newOrderForm, source: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }}>
+                    <option value="shopify">Shopify</option>
+                    <option value="woocommerce">WooCommerce</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Product Item</label>
+                  <select value={newOrderForm.productId} onChange={(e) => setNewOrderForm({ ...newOrderForm, productId: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }}>
+                    {products.slice(0, 30).map(p => (
+                      <option key={p.id} value={p.id}>{p.name} (${p.price.toFixed(2)})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Quantity</label>
+                  <input type="number" min="1" max="100" value={newOrderForm.quantity} onChange={(e) => setNewOrderForm({ ...newOrderForm, quantity: parseInt(e.target.value, 10) || 1 })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => setShowNewOrderModal(false)} className="btn btn-outline btn-sm">Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">Create Order & Ingest</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE CUSTOMER MODAL */}
+      {showNewCustomerModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ width: '100%', maxWidth: '480px', background: '#131b2e', border: '1px solid #334155', borderRadius: '12px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>Add New Customer Account</h3>
+            <form onSubmit={handleCreateCustomer}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>First Name</label>
+                  <input type="text" required value={newCustomerForm.firstName} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, firstName: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Last Name</label>
+                  <input type="text" required value={newCustomerForm.lastName} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, lastName: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Primary Email (Deduplication Key)</label>
+                <input type="email" required value={newCustomerForm.email} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Phone Number</label>
+                <input type="text" value={newCustomerForm.phone} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Staff Notes</label>
+                <input type="text" value={newCustomerForm.notes} onChange={(e) => setNewCustomerForm({ ...newCustomerForm, notes: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => setShowNewCustomerModal(false)} className="btn btn-outline btn-sm">Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">Save Customer</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE PRODUCT MODAL */}
+      {showNewProductModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ width: '100%', maxWidth: '480px', background: '#131b2e', border: '1px solid #334155', borderRadius: '12px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>Add Product to Catalogue</h3>
+            <form onSubmit={handleCreateProduct}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Product Title</label>
+                <input type="text" required value={newProductForm.name} onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>SKU</label>
+                  <input type="text" placeholder="STB-RAW-0001" value={newProductForm.sku} onChange={(e) => setNewProductForm({ ...newProductForm, sku: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Category</label>
+                  <select value={newProductForm.category} onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }}>
+                    <option value="Raw & Unpasteurized">Raw & Unpasteurized</option>
+                    <option value="Full Cream">Full Cream</option>
+                    <option value="Kefir & Cultures">Kefir & Cultures</option>
+                    <option value="Organic Pasture">Organic Pasture</option>
+                    <option value="Flavoured Milk">Flavoured Milk</option>
+                    <option value="Artisan Creamery">Artisan Creamery</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Unit Price ($)</label>
+                  <input type="number" step="0.01" value={newProductForm.price} onChange={(e) => setNewProductForm({ ...newProductForm, price: parseFloat(e.target.value) })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>Initial Stock</label>
+                  <input type="number" value={newProductForm.stockQuantity} onChange={(e) => setNewProductForm({ ...newProductForm, stockQuantity: parseInt(e.target.value, 10) || 50 })} style={{ width: '100%', padding: '8px', background: '#0b1120', border: '1px solid #334155', color: '#fff', borderRadius: '6px' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => setShowNewProductModal(false)} className="btn btn-outline btn-sm">Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">Add to Inventory</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PRODUCT MODAL */}
       {editingProduct && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
           <div style={{ width: '100%', maxWidth: '480px', background: '#131b2e', border: '1px solid #334155', borderRadius: '12px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
@@ -1281,7 +1282,7 @@ export default function CentralCRM() {
         </div>
       )}
 
-      {/* Customer Account Management Drawer */}
+      {/* MANAGE CUSTOMER DRAWER */}
       {selectedCustomer && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
           <div style={{ width: '100%', maxWidth: '520px', background: '#131b2e', border: '1px solid #334155', borderRadius: '12px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
@@ -1321,7 +1322,7 @@ export default function CentralCRM() {
         </div>
       )}
 
-      {/* Order Detail Modal / Drawer */}
+      {/* ORDER INSPECT DRAWER */}
       {selectedOrder && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
           <div style={{ width: '100%', maxWidth: '560px', background: '#131b2e', border: '1px solid #334155', borderRadius: '12px', padding: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
@@ -1337,11 +1338,12 @@ export default function CentralCRM() {
               <div><strong>Customer:</strong> {selectedOrder.customer_name} ({selectedOrder.customer_email})</div>
               <div><strong>Status:</strong> <span className={`badge badge-status-${selectedOrder.status}`}>{selectedOrder.status}</span></div>
               <div><strong>Total Paid:</strong> ${selectedOrder.total.toFixed(2)} {selectedOrder.currency}</div>
+              <div><strong>Delivery Address:</strong> {selectedOrder.shipping_address?.address1 || '2464 Royal Ln'}, {selectedOrder.shipping_address?.city || 'Mesa'}, {selectedOrder.shipping_address?.state || 'NJ'}</div>
 
               <div style={{ marginTop: '10px' }}>
                 <strong style={{ display: 'block', marginBottom: '6px' }}>Line Items:</strong>
                 {selectedOrder.items.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: '#0b1120', borderRadius: '4px', marginBottom: '6px' }}>
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', background: '#0b1120', borderRadius: '4px', marginBottom: '6px' }}>
                     <span>{item.quantity}x {item.title} ({item.sku})</span>
                     <span style={{ fontWeight: '700' }}>${item.total.toFixed(2)}</span>
                   </div>
